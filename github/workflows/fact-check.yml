@@ -1,0 +1,39 @@
+name: Fact Check Video
+
+on:
+  repository_dispatch:
+    types: [fact-check-video]
+
+jobs:
+  process-video:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Run fact check script
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          VIDEO_ID: ${{ github.event.client_payload.video_id }}
+        run: |
+          python scripts/fact_check.py
+      
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/
+          git commit -m "Add fact check for video ${{ github.event.client_payload.video_id }}" || echo "No changes to commit"
+          git push
