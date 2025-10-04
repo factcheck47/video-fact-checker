@@ -35,9 +35,15 @@ class FactCheckApp {
         return null;
     }
 
-    showStatus(message, type = 'info') {
+    showStatus(message, type = 'info', isHTML = false) {
         const status = document.getElementById('status');
-        status.textContent = message;
+        
+        if (isHTML) {
+            status.innerHTML = message;
+        } else {
+            status.textContent = message;
+        }
+        
         status.className = `status ${type}`;
         status.style.display = 'block';
     }
@@ -76,19 +82,24 @@ class FactCheckApp {
             let results = await githubAPI.checkForResults(videoId);
 
             if (!results) {
-                // No cached results, trigger workflow
-                this.showStatus('No cached results found. Starting fact-check process...', 'info');
+                // No cached results, show instructions
+                const issueUrl = githubAPI.getIssueURL(videoId);
                 
-                const triggered = await githubAPI.triggerFactCheck(videoId);
-                
-                if (!triggered) {
-                    throw new Error('Failed to trigger fact-check workflow');
-                }
+                this.showStatus(
+                    `No cached results found. To fact-check this video:<br><br>` +
+                    `1. <a href="${issueUrl}" target="_blank" style="color: white; text-decoration: underline;">Click here to create a GitHub issue</a><br>` +
+                    `2. Submit the issue (it will be pre-filled)<br>` +
+                    `3. Wait here - results will appear automatically in ~5 minutes<br><br>` +
+                    `The workflow runs every 5 minutes and processes all pending requests.`,
+                    'info',
+                    true
+                );
 
-                this.showStatus('Fact-checking in progress... This may take 1-2 minutes', 'info');
+                // Start polling for results
+                this.showStatus('Waiting for fact-check to complete... (this may take up to 5 minutes)', 'info');
                 
                 // Poll for results
-                results = await githubAPI.pollForResults(videoId);
+                results = await githubAPI.pollForResults(videoId, 60, 5000);
             }
 
             // Display results
