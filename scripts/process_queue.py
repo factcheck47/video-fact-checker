@@ -1,17 +1,25 @@
 import os
 import json
-from github import Github
+from github import Github, Auth
 from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
 
 def get_transcript(video_id):
     """Fetch transcript for a YouTube video."""
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-        return transcript
+        # Create an instance and get transcript
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+        return transcript_list
     except Exception as e:
         print(f"Error fetching transcript: {e}")
-        return None
+        # Try with different language codes if English fails
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript = transcript_list.find_transcript(['en', 'en-US', 'en-GB'])
+            return transcript.fetch()
+        except Exception as e2:
+            print(f"Error fetching transcript with fallback: {e2}")
+            return None
 
 def format_transcript(transcript):
     """Convert transcript to readable text with timestamps."""
@@ -128,8 +136,9 @@ def main():
         print("Missing required environment variables")
         return
     
-    # Initialize clients
-    g = Github(github_token)
+    # Initialize clients with new auth method
+    auth = Auth.Token(github_token)
+    g = Github(auth=auth)
     repo = g.get_repo(repo_name)
     openai_client = OpenAI(api_key=openai_api_key)
     
