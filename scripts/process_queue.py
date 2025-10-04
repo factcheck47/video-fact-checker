@@ -1,5 +1,6 @@
 import os
 import json
+import sys
 from github import Github, Auth
 from openai import OpenAI
 
@@ -71,7 +72,7 @@ def fact_check_content(text, client):
             
     except Exception as e:
         print(f"Error fact-checking: {e}")
-        return [{"claim": "Error", "verdict": "error", "explanation": str(e)}]
+        raise
 
 def match_claims_to_timestamps(claims, transcript_data):
     """Match fact-checked claims back to transcript timestamps."""
@@ -103,26 +104,25 @@ def match_claims_to_timestamps(claims, transcript_data):
     return results
 
 def process_video(video_id, openai_client):
-    """Process a single video fact-check."""
+    """Process a single video fact-check. Raises exceptions on failure."""
     print(f"Processing video: {video_id}")
     
     # Check if already processed
     output_path = f"results/{video_id}.json"
     if os.path.exists(output_path):
         print(f"Video {video_id} already processed, skipping")
-        return True
+        return {'success': True, 'message': 'Already processed'}
     
-    # Get transcript
+    # Get transcript - raise exception if fails
     transcript = get_transcript(video_id)
     if not transcript:
-        print("Failed to get transcript")
-        return False
+        raise Exception("Failed to get transcript. This video may have subtitles disabled or be unavailable.")
     
     # Format transcript
     full_text, transcript_data = format_transcript(transcript)
     print(f"Transcript length: {len(full_text)} characters")
     
-    # Fact check
+    # Fact check - let exceptions bubble up
     claims = fact_check_content(full_text, openai_client)
     print(f"Found {len(claims)} claims to check")
     
@@ -139,7 +139,7 @@ def process_video(video_id, openai_client):
         }, f, indent=2)
     
     print(f"Results saved to {output_path}")
-    return True
+    return {'success': True, 'message': 'Fact-check completed successfully'}
 
 def main():
     github_token = os.environ.get('GITHUB_TOKEN')
@@ -148,7 +148,7 @@ def main():
     
     if not all([github_token, openai_api_key, repo_name]):
         print("Missing required environment variables")
-        return
+        sys.exit(1)
     
     # Initialize clients with new auth method
     auth = Auth.Token(github_token)
@@ -160,6 +160,7 @@ def main():
     issues = repo.get_issues(state='open')
     
     processed_count = 0
+    failed_count = 0
     
     for issue in issues:
         # Check if issue title starts with "Fact-check:"
@@ -177,20 +178,38 @@ def main():
         
         print(f"Processing issue #{issue.number} for video {video_id}")
         
-        # Process the video
-        success = process_video(video_id, openai_client)
-        
-        if success:
+        # Process the video - let exceptions propagate
+        try:
+            result = process_video(video_id, openai_client)
+            
             # Close issue with success comment
-            issue.create_comment(f"✅ Fact-check complete! View results at: https://{repo.owner.login}.github.io/{repo.name}/?v={video_id}")
+            issue.create_comment(f"✅ Fact-check complete! {result['message']}\n\nView results at: https://{repo.owner.login}.github.io/{repo.name}/?v={video_id}")
             issue.edit(state='closed', labels=['completed'])
             processed_count += 1
-        else:
-            # Comment with error
-            issue.create_comment("❌ Failed to process video. Please check the video ID and try again.")
+            
+        except Exception as e:
+            # Comment with detailed error and close issue
+            error_msg = str(e)
+            issue.create_comment(f"❌ Failed to process video.\n\n**Error:** {error_msg}\n\n**Possible solutions:**\n- Make sure the video has captions/subtitles enabled\n- Try a different video\n- Check that the video ID is correct: `{video_id}`")
             issue.edit(state='closed', labels=['failed'])
+            failed_count += 1
+            print(f"Failed to process video {video_id}: {error_msg}")
+            
+            # FAIL THE WORKFLOW - don't continue processing
+            print(f"\n❌ WORKFLOW FAILED: Unable to process video {video_id}")
+            print(f"Error: {error_msg}")
+            sys.exit(1)
     
-    print(f"Processed {processed_count} videos")
+    print(f"\nProcessed {processed_count} videos successfully")
+    
+    if failed_count > 0:
+        print(f"Failed {failed_count} videos")
+        sys.exit(1)  # Exit with error if any videos failed
+    
+    if processed_count == 0:
+        print("No videos to process")
+        # This is not an error - just nothing to do
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
