@@ -101,7 +101,7 @@ class FactCheckApp {
                     `Transcript ready! Now:<br><br>` +
                     `1. <a href="${issueUrl}" target="_blank" style="color: white; text-decoration: underline; font-weight: bold;">Click here to create the fact-check request</a><br>` +
                     `2. The issue will be pre-filled with the transcript<br>` +
-                    `3. Submit the issue<br>` +
+                    `3. Submit the issue - processing starts immediately!<br>` +
                     `4. Come back and click "Start Polling" below<br><br>` +
                     `<button id="startPolling" style="padding: 10px 20px; background: #48bb78; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px;">Start Polling for Results</button>`,
                     'info',
@@ -115,10 +115,10 @@ class FactCheckApp {
                         pollBtn.disabled = true;
                         pollBtn.textContent = 'Polling...';
                         
-                        this.showStatus('Waiting for fact-check to complete... (this may take up to 5 minutes)', 'info');
+                        this.showStatus('Waiting for fact-check to complete... (usually takes 30-60 seconds)', 'info');
                         
                         try {
-                            results = await githubAPI.pollForResults(videoId, 60, 5000);
+                            results = await githubAPI.pollForResults(videoId, 30, 3000);
                             await this.displayResults(videoId, results.claims);
                             this.showStatus('Fact-check complete!', 'success');
                         } catch (error) {
