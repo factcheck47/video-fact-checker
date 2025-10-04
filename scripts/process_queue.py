@@ -3,38 +3,78 @@ import json
 import sys
 from github import Github, Auth
 from openai import OpenAI
+import yt_dlp
 
 def get_transcript(video_id):
-    """Fetch transcript for a YouTube video."""
+    """Fetch transcript for a YouTube video using yt-dlp."""
     try:
-        # Import inside function to ensure it's loaded
-        from youtube_transcript_api import YouTubeTranscriptApi
+        url = f'https://www.youtube.com/watch?v={video_id}'
         
-        # Get transcript - this is a static method
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-        print(f"Successfully fetched transcript with {len(transcript_list)} entries")
-        return transcript_list
+        ydl_opts = {
+            'skip_download': True,
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': ['en'],
+            'subtitlesformat': 'json3',
+            'quiet': True,
+            'no_warnings': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+            # Try to get subtitles
+            subtitles = info.get('subtitles', {})
+            automatic_captions = info.get('automatic_captions', {})
+            
+            # Prefer manual subtitles, fall back to auto-generated
+            subtitle_data = None
+            if 'en' in subtitles:
+                subtitle_data = subtitles['en']
+            elif 'en' in automatic_captions:
+                subtitle_data = automatic_captions['en']
+            
+            if not subtitle_data:
+                print("No English subtitles found")
+                return None
+            
+            # Find json3 format
+            json3_url = None
+            for sub in subtitle_data:
+                if sub.get('ext') == 'json3':
+                    json3_url = sub.get('url')
+                    break
+            
+            if not json3_url:
+                print("No json3 subtitle format found")
+                return None
+            
+            # Download and parse the subtitle data
+            import urllib.request
+            with urllib.request.urlopen(json3_url) as response:
+                subtitle_json = json.loads(response.read().decode('utf-8'))
+            
+            # Convert to transcript format
+            transcript = []
+            events = subtitle_json.get('events', [])
+            
+            for event in events:
+                if 'segs' in event:
+                    start_time = event.get('tStartMs', 0) / 1000.0  # Convert to seconds
+                    text = ''.join([seg.get('utf8', '') for seg in event['segs']])
+                    if text.strip():
+                        transcript.append({
+                            'start': start_time,
+                            'text': text.strip()
+                        })
+            
+            print(f"Successfully fetched transcript with {len(transcript)} entries")
+            return transcript
+            
     except Exception as e:
-        print(f"Error fetching transcript (attempt 1): {e}")
+        print(f"Error fetching transcript: {e}")
         print(f"Error type: {type(e).__name__}")
-        
-        # Try with language fallback
-        try:
-            from youtube_transcript_api import YouTubeTranscriptApi
-            transcript_list_obj = YouTubeTranscriptApi.list_transcripts(video_id)
-            
-            # Try to find English transcript
-            for transcript in transcript_list_obj:
-                if transcript.language_code.startswith('en'):
-                    return transcript.fetch()
-            
-            # If no English, get first available
-            return next(iter(transcript_list_obj)).fetch()
-            
-        except Exception as e2:
-            print(f"Error fetching transcript (attempt 2): {e2}")
-            print(f"Error type: {type(e2).__name__}")
-            return None
+        return None
 
 def format_transcript(transcript):
     """Convert transcript to readable text with timestamps."""
