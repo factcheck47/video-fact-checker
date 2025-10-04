@@ -31,6 +31,19 @@ jobs:
           pip install -r requirements.txt
           python -c "from youtube_transcript_api import YouTubeTranscriptApi; print('YouTube API imported successfully')"
       
+      - name: Test transcript API
+        run: |
+          python -c "
+          from youtube_transcript_api import YouTubeTranscriptApi
+          # Test with a known working video (Rick Astley)
+          try:
+              transcript = YouTubeTranscriptApi.get_transcript('dQw4w9WgXcQ')
+              print(f'✅ API works! Got {len(transcript)} transcript entries')
+          except Exception as e:
+              print(f'❌ API test failed: {e}')
+          "
+      
+      
       - name: Process fact-check queue
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
