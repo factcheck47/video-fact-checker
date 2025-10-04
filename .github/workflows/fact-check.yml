@@ -29,18 +29,20 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          python -c "from youtube_transcript_api import YouTubeTranscriptApi; print('YouTube API imported successfully')"
+          python -c "import yt_dlp; print('yt-dlp imported successfully')"
       
-      - name: Test transcript API
+      - name: Test yt-dlp
         run: |
           python -c "
-          from youtube_transcript_api import YouTubeTranscriptApi
+          import yt_dlp
           # Test with a known working video (Rick Astley)
           try:
-              transcript = YouTubeTranscriptApi.get_transcript('dQw4w9WgXcQ')
-              print(f'✅ API works! Got {len(transcript)} transcript entries')
+              ydl_opts = {'quiet': True, 'no_warnings': True}
+              with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                  info = ydl.extract_info('https://www.youtube.com/watch?v=dQw4w9WgXcQ', download=False)
+                  print(f'✅ yt-dlp works! Video title: {info.get(\"title\", \"Unknown\")}')
           except Exception as e:
-              print(f'❌ API test failed: {e}')
+              print(f'❌ yt-dlp test failed: {e}')
           "
       
       
