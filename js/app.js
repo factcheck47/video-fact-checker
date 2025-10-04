@@ -89,22 +89,39 @@ class FactCheckApp {
                     `No cached results found. To fact-check this video:<br><br>` +
                     `1. <a href="${issueUrl}" target="_blank" style="color: white; text-decoration: underline;">Click here to create a GitHub issue</a><br>` +
                     `2. Submit the issue (it will be pre-filled)<br>` +
-                    `3. Wait here - results will appear automatically in ~5 minutes<br><br>` +
-                    `The workflow runs every 5 minutes and processes all pending requests.`,
+                    `3. Come back here and click "Start Polling" below<br><br>` +
+                    `<button id="startPolling" style="padding: 10px 20px; background: #48bb78; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px;">Start Polling for Results</button>`,
                     'info',
                     true
                 );
 
-                // Start polling for results
-                this.showStatus('Waiting for fact-check to complete... (this may take up to 5 minutes)', 'info');
-                
-                // Poll for results
-                results = await githubAPI.pollForResults(videoId, 60, 5000);
+                // Wait for user to click the polling button
+                return new Promise((resolve) => {
+                    const pollBtn = document.getElementById('startPolling');
+                    pollBtn.onclick = async () => {
+                        pollBtn.disabled = true;
+                        pollBtn.textContent = 'Polling...';
+                        
+                        this.showStatus('Waiting for fact-check to complete... (this may take up to 5 minutes)', 'info');
+                        
+                        try {
+                            results = await githubAPI.pollForResults(videoId, 60, 5000);
+                            await this.displayResults(videoId, results.claims);
+                            this.showStatus('Fact-check complete!', 'success');
+                        } catch (error) {
+                            this.showStatus(`Error: ${error.message}`, 'error');
+                        }
+                        
+                        resolve();
+                    };
+                });
             }
 
             // Display results
-            this.showStatus('Fact-check complete!', 'success');
-            await this.displayResults(videoId, results.claims);
+            if (results) {
+                this.showStatus('Fact-check complete!', 'success');
+                await this.displayResults(videoId, results.claims);
+            }
 
         } catch (error) {
             console.error('Error:', error);
