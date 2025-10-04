@@ -9,8 +9,23 @@ class GitHubAPI {
         this.baseURL = 'https://api.github.com';
     }
 
+    getIssueURLWithTranscript(videoId, transcript) {
+        // Generate URL for creating issue with transcript in body
+        const title = encodeURIComponent(`Fact-check: ${videoId}`);
+        
+        // Format transcript as JSON in the body
+        const transcriptJSON = JSON.stringify(transcript, null, 2);
+        const body = encodeURIComponent(
+            `Video: https://youtube.com/watch?v=${videoId}\n\n` +
+            `**Transcript Data:**\n` +
+            `\`\`\`json\n${transcriptJSON}\n\`\`\``
+        );
+        
+        return `https://github.com/${this.config.owner}/${this.config.repo}/issues/new?title=${title}&body=${body}`;
+    }
+
     getIssueURL(videoId) {
-        // Generate URL for creating a new issue with pre-filled title
+        // Fallback method without transcript
         const title = encodeURIComponent(`Fact-check: ${videoId}`);
         const body = encodeURIComponent(`Please fact-check this video: https://youtube.com/watch?v=${videoId}`);
         return `https://github.com/${this.config.owner}/${this.config.repo}/issues/new?title=${title}&body=${body}`;
