@@ -82,14 +82,27 @@ class FactCheckApp {
             let results = await githubAPI.checkForResults(videoId);
 
             if (!results) {
-                // No cached results, show instructions
-                const issueUrl = githubAPI.getIssueURL(videoId);
+                // No cached results, fetch transcript in browser
+                this.showStatus('Fetching transcript from YouTube...', 'info');
+                
+                const transcript = await this.fetchTranscript(videoId);
+                
+                if (!transcript) {
+                    this.showStatus('Failed to fetch transcript. This video may not have captions available.', 'error');
+                    return;
+                }
+                
+                this.showStatus(`Transcript fetched! (${transcript.length} entries). Creating issue...`, 'success');
+                
+                // Create issue with transcript
+                const issueUrl = githubAPI.getIssueURLWithTranscript(videoId, transcript);
                 
                 this.showStatus(
-                    `No cached results found. To fact-check this video:<br><br>` +
-                    `1. <a href="${issueUrl}" target="_blank" style="color: white; text-decoration: underline;">Click here to create a GitHub issue</a><br>` +
-                    `2. Submit the issue (it will be pre-filled)<br>` +
-                    `3. Come back here and click "Start Polling" below<br><br>` +
+                    `Transcript ready! Now:<br><br>` +
+                    `1. <a href="${issueUrl}" target="_blank" style="color: white; text-decoration: underline; font-weight: bold;">Click here to create the fact-check request</a><br>` +
+                    `2. The issue will be pre-filled with the transcript<br>` +
+                    `3. Submit the issue<br>` +
+                    `4. Come back and click "Start Polling" below<br><br>` +
                     `<button id="startPolling" style="padding: 10px 20px; background: #48bb78; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 10px;">Start Polling for Results</button>`,
                     'info',
                     true
@@ -129,6 +142,61 @@ class FactCheckApp {
         } finally {
             checkBtn.disabled = false;
             videoUrlInput.disabled = false;
+        }
+    }
+
+    async fetchTranscript(videoId) {
+        try {
+            // Fetch transcript from YouTube's subtitle endpoint
+            const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`);
+            const html = await response.text();
+            
+            // Extract caption track URL from page
+            const captionMatch = html.match(/"captionTracks":\[({[^]]+?})\]/);
+            if (!captionMatch) {
+                console.log('No captions found in page');
+                return null;
+            }
+            
+            const captionsData = JSON.parse('[' + captionMatch[1] + ']');
+            
+            // Find English captions
+            let captionUrl = null;
+            for (const track of captionsData) {
+                if (track.languageCode && track.languageCode.startsWith('en')) {
+                    captionUrl = track.baseUrl;
+                    break;
+                }
+            }
+            
+            if (!captionUrl) {
+                console.log('No English captions found');
+                return null;
+            }
+            
+            // Fetch the actual captions
+            const captionsResponse = await fetch(captionUrl);
+            const captionsXML = await captionsResponse.text();
+            
+            // Parse XML captions
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(captionsXML, 'text/xml');
+            const textElements = xmlDoc.getElementsByTagName('text');
+            
+            const transcript = [];
+            for (const elem of textElements) {
+                const start = parseFloat(elem.getAttribute('start') || 0);
+                const text = elem.textContent.trim();
+                if (text) {
+                    transcript.push({ start, text });
+                }
+            }
+            
+            return transcript;
+            
+        } catch (error) {
+            console.error('Error fetching transcript:', error);
+            return null;
         }
     }
 
