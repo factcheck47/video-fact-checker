@@ -1,10 +1,6 @@
 const GITHUB_CONFIG = {
     owner: 'factcheck47',
-    repo: 'video-fact-checker',
-    // User will need to add their Personal Access Token here
-    // Get it from: https://github.com/settings/tokens
-    // Needs: repo scope (for repository_dispatch and reading/writing files)
-    token: 'YOUR_GITHUB_PAT_HERE'
+    repo: 'video-fact-checker'
 };
 
 class GitHubAPI {
@@ -13,54 +9,23 @@ class GitHubAPI {
         this.baseURL = 'https://api.github.com';
     }
 
-    async triggerFactCheck(videoId) {
-        const url = `${this.baseURL}/repos/${this.config.owner}/${this.config.repo}/dispatches`;
-        
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `token ${this.config.token}`,
-                    'Accept': 'application/vnd.github+json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    event_type: 'fact-check-video',
-                    client_payload: {
-                        video_id: videoId
-                    }
-                })
-            });
-
-            if (response.status === 204) {
-                console.log('Workflow triggered successfully');
-                return true;
-            } else {
-                console.error('Failed to trigger workflow:', response.status);
-                return false;
-            }
-        } catch (error) {
-            console.error('Error triggering workflow:', error);
-            return false;
-        }
+    getIssueURL(videoId) {
+        // Generate URL for creating a new issue with pre-filled title
+        const title = encodeURIComponent(`Fact-check: ${videoId}`);
+        const body = encodeURIComponent(`Please fact-check this video: https://youtube.com/watch?v=${videoId}`);
+        return `https://github.com/${this.config.owner}/${this.config.repo}/issues/new?title=${title}&body=${body}`;
     }
 
     async checkForResults(videoId) {
-        const url = `${this.baseURL}/repos/${this.config.owner}/${this.config.repo}/contents/results/${videoId}.json`;
+        // No authentication needed to read from public repo
+        const url = `https://raw.githubusercontent.com/${this.config.owner}/${this.config.repo}/main/results/${videoId}.json`;
         
         try {
-            const response = await fetch(url, {
-                headers: {
-                    'Authorization': `token ${this.config.token}`,
-                    'Accept': 'application/vnd.github+json'
-                }
-            });
+            const response = await fetch(url);
 
             if (response.ok) {
                 const data = await response.json();
-                // Content is base64 encoded
-                const content = atob(data.content);
-                return JSON.parse(content);
+                return data;
             } else if (response.status === 404) {
                 // File doesn't exist yet
                 return null;
@@ -74,8 +39,8 @@ class GitHubAPI {
         }
     }
 
-    async pollForResults(videoId, maxAttempts = 30, interval = 5000) {
-        // Poll every 5 seconds, up to 30 times (2.5 minutes)
+    async pollForResults(videoId, maxAttempts = 60, interval = 5000) {
+        // Poll every 5 seconds, up to 60 times (5 minutes)
         for (let i = 0; i < maxAttempts; i++) {
             console.log(`Polling attempt ${i + 1}/${maxAttempts}`);
             
@@ -90,7 +55,7 @@ class GitHubAPI {
             await new Promise(resolve => setTimeout(resolve, interval));
         }
         
-        throw new Error('Timeout waiting for results');
+        throw new Error('Timeout waiting for results. The workflow runs every 5 minutes, so please wait and try again.');
     }
 }
 
