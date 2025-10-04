@@ -1,11 +1,13 @@
-name: Fact Check Video
+name: Fact Check Video Queue
 
 on:
-  repository_dispatch:
-    types: [fact-check-video]
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
-  process-video:
+  process-queue:
     runs-on: ubuntu-latest
     
     steps:
@@ -22,18 +24,20 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+          pip install PyGithub
       
-      - name: Run fact check script
+      - name: Process fact-check queue
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          VIDEO_ID: ${{ github.event.client_payload.video_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          python scripts/fact_check.py
+          python scripts/process_queue.py
       
       - name: Commit results
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add results/
-          git commit -m "Add fact check for video ${{ github.event.client_payload.video_id }}" || echo "No changes to commit"
+          git commit -m "Add fact check results" || echo "No changes to commit"
           git push
