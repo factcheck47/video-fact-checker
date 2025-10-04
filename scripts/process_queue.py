@@ -1,24 +1,38 @@
 import os
 import json
 from github import Github, Auth
-from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
 
 def get_transcript(video_id):
     """Fetch transcript for a YouTube video."""
     try:
-        # Create an instance and get transcript
+        # Import inside function to ensure it's loaded
+        from youtube_transcript_api import YouTubeTranscriptApi
+        
+        # Get transcript - this is a static method
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+        print(f"Successfully fetched transcript with {len(transcript_list)} entries")
         return transcript_list
     except Exception as e:
-        print(f"Error fetching transcript: {e}")
-        # Try with different language codes if English fails
+        print(f"Error fetching transcript (attempt 1): {e}")
+        print(f"Error type: {type(e).__name__}")
+        
+        # Try with language fallback
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            transcript = transcript_list.find_transcript(['en', 'en-US', 'en-GB'])
-            return transcript.fetch()
+            from youtube_transcript_api import YouTubeTranscriptApi
+            transcript_list_obj = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Try to find English transcript
+            for transcript in transcript_list_obj:
+                if transcript.language_code.startswith('en'):
+                    return transcript.fetch()
+            
+            # If no English, get first available
+            return next(iter(transcript_list_obj)).fetch()
+            
         except Exception as e2:
-            print(f"Error fetching transcript with fallback: {e2}")
+            print(f"Error fetching transcript (attempt 2): {e2}")
+            print(f"Error type: {type(e2).__name__}")
             return None
 
 def format_transcript(transcript):
